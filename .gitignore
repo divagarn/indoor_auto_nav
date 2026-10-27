@@ -1,0 +1,26 @@
+# colcon
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Gazebo / ROS runtime
+*.db
+*.pcd
+*.ply
+*.bag
+*.mcap
+rosbag2_*/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Claude Code local settings
+.claude/settings.local.json

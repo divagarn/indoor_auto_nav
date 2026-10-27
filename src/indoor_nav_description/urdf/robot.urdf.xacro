@@ -1,0 +1,253 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="$(arg robot_name)">
+
+  <!-- Variant arguments (see launch/rsp.launch.py for the Pebble/Nomad/Sentinel presets) -->
+  <xacro:arg name="robot_name" default="nomad"/>
+  <xacro:arg name="mast_h" default="0.15"/>   <!-- lidar mast length above chassis top -->
+  <xacro:arg name="cam_h" default="0.10"/>    <!-- camera height above base_link origin -->
+  <xacro:arg name="body_rgba" default="0.1 0.3 0.8 1"/>
+
+  <!-- ===== Parameters ===== -->
+  <xacro:property name="chassis_r" value="0.25"/>
+  <xacro:property name="chassis_h" value="0.14"/>
+  <xacro:property name="chassis_mass" value="12.0"/>
+  <xacro:property name="wheel_r" value="0.075"/>
+  <xacro:property name="wheel_w" value="0.04"/>
+  <xacro:property name="wheel_mass" value="1.0"/>
+  <xacro:property name="wheel_sep" value="0.38"/>
+  <xacro:property name="caster_r" value="0.03"/>
+  <xacro:property name="mast_h" value="$(arg mast_h)"/>
+  <xacro:property name="cam_h" value="$(arg cam_h)"/>
+  <xacro:property name="PI" value="3.14159265359"/>
+
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia ixx="${m*(y*y+z*z)/12}" iyy="${m*(x*x+z*z)/12}" izz="${m*(x*x+y*y)/12}" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- ===== Base ===== -->
+  <link name="base_footprint"/>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry><cylinder radius="${chassis_r}" length="${chassis_h}"/></geometry>
+      <material name="body_color"><color rgba="$(arg body_rgba)"/></material>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="${chassis_r}" length="${chassis_h}"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="${chassis_mass}"/>
+      <inertia ixx="${chassis_mass*(3*chassis_r*chassis_r+chassis_h*chassis_h)/12}" iyy="${chassis_mass*(3*chassis_r*chassis_r+chassis_h*chassis_h)/12}" izz="${chassis_mass*chassis_r*chassis_r/2}" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <!-- base_link origin sits at the chassis centre; wheel axle height = wheel_r -->
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${wheel_r + 0.0}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ===== Wheels ===== -->
+  <xacro:macro name="wheel" params="name y">
+    <link name="${name}_wheel">
+      <visual>
+        <origin rpy="${PI/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_r}" length="${wheel_w}"/></geometry>
+        <material name="black"><color rgba="0.05 0.05 0.05 1"/></material>
+      </visual>
+      <collision>
+        <origin rpy="${PI/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_r}" length="${wheel_w}"/></geometry>
+      </collision>
+      <inertial>
+        <origin rpy="${PI/2} 0 0"/>
+        <mass value="${wheel_mass}"/>
+        <inertia ixx="${wheel_mass*(3*wheel_r*wheel_r+wheel_w*wheel_w)/12}" iyy="${wheel_mass*(3*wheel_r*wheel_r+wheel_w*wheel_w)/12}" izz="${wheel_mass*wheel_r*wheel_r/2}" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+    <joint name="${name}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${name}_wheel"/>
+      <origin xyz="0 ${y} 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+    </joint>
+    <gazebo reference="${name}_wheel">
+      <mu1>1.0</mu1><mu2>1.0</mu2><kp>500000.0</kp><kd>10.0</kd>
+    </gazebo>
+  </xacro:macro>
+  <xacro:wheel name="left"  y="${wheel_sep/2}"/>
+  <xacro:wheel name="right" y="${-wheel_sep/2}"/>
+
+  <!-- ===== Casters (frictionless spheres) ===== -->
+  <xacro:macro name="caster" params="name x">
+    <link name="${name}_caster">
+      <visual><geometry><sphere radius="${caster_r}"/></geometry></visual>
+      <collision><geometry><sphere radius="${caster_r}"/></geometry></collision>
+      <inertial><mass value="0.1"/><inertia ixx="1e-5" iyy="1e-5" izz="1e-5" ixy="0" ixz="0" iyz="0"/></inertial>
+    </link>
+    <joint name="${name}_caster_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_caster"/>
+      <origin xyz="${x} 0 ${-(wheel_r - caster_r)}"/>
+    </joint>
+    <gazebo reference="${name}_caster">
+      <mu1>0.0</mu1><mu2>0.0</mu2>
+    </gazebo>
+  </xacro:macro>
+  <xacro:caster name="front" x="0.17"/>
+  <xacro:caster name="rear"  x="-0.17"/>
+
+  <!-- ===== 3D lidar (16 ch, VLP-16-like) ===== -->
+  <link name="lidar_link">
+    <visual>
+      <geometry><cylinder radius="0.05" length="0.07"/></geometry>
+      <material name="grey"><color rgba="0.3 0.3 0.3 1"/></material>
+    </visual>
+    <collision><geometry><cylinder radius="0.05" length="0.07"/></geometry></collision>
+    <inertial><mass value="0.5"/><inertia ixx="5e-4" iyy="5e-4" izz="5e-4" ixy="0" ixz="0" iyz="0"/></inertial>
+  </link>
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="-0.05 0 ${chassis_h/2 + 0.035 + mast_h}"/>
+  </joint>
+  <!-- mast -->
+  <link name="mast_link">
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry><cylinder radius="0.015" length="${mast_h}"/></geometry>
+    </visual>
+    <inertial><mass value="0.1"/><inertia ixx="1e-4" iyy="1e-4" izz="1e-5" ixy="0" ixz="0" iyz="0"/></inertial>
+  </link>
+  <joint name="mast_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="mast_link"/>
+    <origin xyz="-0.05 0 ${chassis_h/2 + mast_h/2}"/>
+  </joint>
+
+  <!-- camera post (only needed when the camera sits above the chassis top) -->
+  <xacro:if value="${cam_h > chassis_h/2 + 0.02}">
+    <link name="camera_post_link">
+      <visual><geometry><cylinder radius="0.012" length="${cam_h - chassis_h/2}"/></geometry></visual>
+      <inertial><mass value="0.1"/><inertia ixx="1e-4" iyy="1e-4" izz="1e-5" ixy="0" ixz="0" iyz="0"/></inertial>
+    </link>
+    <joint name="camera_post_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="camera_post_link"/>
+      <origin xyz="0.22 0 ${(chassis_h/2 + cam_h)/2 - 0.02}"/>
+    </joint>
+  </xacro:if>
+
+  <!-- ===== RGB-D camera ===== -->
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.03 0.12 0.04"/></geometry>
+      <material name="red"><color rgba="0.8 0.1 0.1 1"/></material>
+    </visual>
+    <inertial><mass value="0.1"/><inertia ixx="1e-4" iyy="1e-4" izz="1e-4" ixy="0" ixz="0" iyz="0"/></inertial>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.22 0 ${cam_h}"/>
+  </joint>
+  <!-- optical frame: z forward, x right, y down -->
+  <link name="camera_optical_link"/>
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_optical_link"/>
+    <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
+  </joint>
+
+  <!-- ===== Gazebo plugins ===== -->
+  <gazebo>
+    <plugin name="diff_drive" filename="libgazebo_ros_diff_drive.so">
+      <ros><namespace>/</namespace></ros>
+      <update_rate>50</update_rate>
+      <left_joint>left_wheel_joint</left_joint>
+      <right_joint>right_wheel_joint</right_joint>
+      <wheel_separation>${wheel_sep}</wheel_separation>
+      <wheel_diameter>${2*wheel_r}</wheel_diameter>
+      <max_wheel_torque>30</max_wheel_torque>
+      <max_wheel_acceleration>5.0</max_wheel_acceleration>
+      <command_topic>cmd_vel</command_topic>
+      <odometry_topic>odom</odometry_topic>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>base_footprint</robot_base_frame>
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>true</publish_odom_tf>
+      <publish_wheel_tf>false</publish_wheel_tf>
+    </plugin>
+    <plugin name="joint_states" filename="libgazebo_ros_joint_state_publisher.so">
+      <ros><remapping>~/out:=joint_states</remapping></ros>
+      <update_rate>30</update_rate>
+      <joint_name>left_wheel_joint</joint_name>
+      <joint_name>right_wheel_joint</joint_name>
+    </plugin>
+  </gazebo>
+
+  <!-- 3D lidar: 16 vertical channels, 360 deg, PointCloud2 on /points -->
+  <gazebo reference="lidar_link">
+    <sensor name="lidar" type="ray">
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+      <update_rate>10</update_rate>
+      <pose>0 0 0 0 0 0</pose>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>720</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>16</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.2618</min_angle>
+            <max_angle>0.2618</max_angle>
+          </vertical>
+        </scan>
+        <range><min>0.3</min><max>30.0</max><resolution>0.01</resolution></range>
+        <noise><type>gaussian</type><mean>0.0</mean><stddev>0.01</stddev></noise>
+      </ray>
+      <plugin name="lidar_plugin" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <namespace>/</namespace>
+          <remapping>~/out:=points</remapping>
+        </ros>
+        <output_type>sensor_msgs/PointCloud2</output_type>
+        <frame_name>lidar_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- RGB-D camera: /camera/image_raw, /camera/depth/image_raw, /camera/points -->
+  <gazebo reference="camera_link">
+    <sensor name="rgbd_camera" type="depth">
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+      <update_rate>15</update_rate>
+      <camera>
+        <horizontal_fov>1.2112</horizontal_fov>  <!-- 69.4 deg, RealSense-like -->
+        <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+        <clip><near>0.3</near><far>8.0</far></clip>
+        <noise><type>gaussian</type><mean>0.0</mean><stddev>0.005</stddev></noise>
+      </camera>
+      <plugin name="rgbd_plugin" filename="libgazebo_ros_camera.so">
+        <ros>
+          <namespace>/camera</namespace>
+        </ros>
+        <camera_name>rgbd</camera_name>
+        <frame_name>camera_optical_link</frame_name>
+        <min_depth>0.3</min_depth>
+        <max_depth>8.0</max_depth>
+      </plugin>
+    </sensor>
+  </gazebo>
+</robot>

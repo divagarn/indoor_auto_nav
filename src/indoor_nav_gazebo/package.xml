@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>indoor_nav_gazebo</name>
+  <version>0.1.0</version>
+  <description>Gazebo Classic simulation: indoor multi-room world + robot spawn</description>
+  <maintainer email="n.divagar18@gmail.com">divagar</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>indoor_nav_description</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>teleop_twist_keyboard</exec_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>
